@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Schach gegen Bot</title>
+    <!-- Chess.js (Spiellogik) & Chessboard.js (Grafische Oberfläche) -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.css">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            background-color: #222;
+            color: #fff;
+            margin: 0;
+        }
+        h1 { margin-bottom: 10px; }
+        #board {
+            width: 400px;
+            margin: 10px 0;
+        }
+        .controls {
+            margin-top: 10px;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            border: none;
+            border-radius: 5px;
+            background-color: #4CAF50;
+            color: white;
+            transition: 0.2s;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        #status {
+            margin-top: 10px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Schach gegen Bot</h1>
+    <div id="board"></div>
+    <div id="status">Du bist am Zug (Weiß)</div>
+    <div class="controls">
+        <button onclick="resetGame()">Neues Spiel</button>
+    </div>
+
+    <script>
+        let game = new Chess();
+        let board = null;
+
+        // Figurenwerte für die Bot-Bewertung
+        const pieceValues = {
+            p: 10,   // Bauer
+            n: 30,   // Springer
+            b: 30,   // Läufer
+            r: 50,   // Turm
+            q: 90,   // Dame
+            k: 1000  // König
+        };
+
+        // Züge von Figuren auf der Oberfläche erlauben/verhindern
+        function onDragStart(source, piece) {
+            // Spiel vorbei oder Bot ist am Zug? -> Keine Bewegung
+            if (game.game_over() || piece.search(/^b/) !== -1) {
+                return false;
+            }
+        }
+
+        // Wenn eine Figur losgelassen wird
+        function onDrop(source, target) {
+            // Zug ausführen
+            let move = game.move({
+                from: source,
+                to: target,
+                promotion: 'q' // Automatisch zur Dame umwandeln
+            });
+
+            // Ungültiger Zug?
+            if (move === null) return 'snapback';
+
+            updateStatus();
+
+            // Nach dem Spielerzug führt der Bot seinen Zug aus
+            window.setTimeout(makeBotMove, 250);
+        }
+
+        function onSnapEnd() {
+            board.position(game.fen());
+        }
+
+        // Bot-KI: Einfacher Minimax mit Materialbewertung
+        function makeBotMove() {
+            if (game.game_over()) return;
+
+            let possibleMoves = game.moves({ verbose: true });
+            if (possibleMoves.length === 0) return;
+
+            let bestMove = null;
+            let bestValue = -Infinity;
+
+            // Bewertung jedes möglichen Zuges
+            for (let move of possibleMoves) {
+                game.move(move);
+                let boardValue = evaluateBoard(game.board());
+                game.undo();
+
+                // Finde den Zug mit der besten Materialbewertung für Schwarz
+                if (boardValue > bestValue) {
+                    bestValue = boardValue;
+                    bestMove = move;
+                }
+            }
+
+            // Zug ausführen
+            game.move(bestMove);
+            board.position(game.fen());
+            updateStatus();
+        }
+
+        // Bewertet das Brett aus Sicht des Bots (Schwarz)
+        function evaluateBoard(boardState) {
+            let totalEvaluation = 0;
+            for (let row = 0; row < 8; row++) {
+                for (let col = 0; col < 8; col++) {
+                    let piece = boardState[row][col];
+                    if (piece) {
+                        let val = pieceValues[piece.type];
+                        // Schwarz positiv, Weiß negativ
+                        totalEvaluation += (piece.color === 'b' ? val : -val);
+                    }
+                }
+            }
+            return totalEvaluation;
+        }
+
+        // Spielstatus aktualisieren
+        function updateStatus() {
+            let statusText = '';
+
+            if (game.in_checkmate()) {
+                statusText = game.turn() === 'w' ? 'Schachmatt! Schwarz gewinnt.' : 'Schachmatt! Weiß gewinnt.';
+            } else if (game.in_draw()) {
+                statusText = 'Unentschieden!';
+            } else {
+                statusText = game.turn() === 'w' ? 'Du bist am Zug (Weiß)' : 'Bot denkt nach (Schwarz)...';
+                if (game.in_check()) {
+                    statusText += ' - SCHACH!';
+                }
+            }
+
+            document.getElementById('status').innerText = statusText;
+        }
+
+        // Spiel zurücksetzen
+        function resetGame() {
+            game.reset();
+            board.position('start');
+            updateStatus();
+        }
+
+        // Brett initialisieren
+        board = Chessboard('board', {
+            draggable: true,
+            position: 'start',
+            onDragStart: onDragStart,
+            onDrop: onDrop,
+            onSnapEnd: onSnapEnd
+        });
+
+        updateStatus();
+    </script>
+</body>
+</html>
